@@ -48,12 +48,13 @@ Publish only from this repository to `ghcr.io/danyal/nyt-to-pdf`. Main updates
 Do not repoint stable from an ordinary main push or a prerelease. Use the
 workflow's `GITHUB_TOKEN`. Keep the repository and package public as requested.
 
-Unraid: `root@192.168.1.104` (`RacksOnRacks`), container `nyt-to-image`, bridge
-network, host port 10070 to container 8001. Its persistent DockerMan template is
-`/boot/config/plugins/dockerMan/templates-user/my-nyt-to-image.xml` and must agree
-with the running image. Preserve labels, port mapping, autostart, and the PNG
-cache mapping during replacement. The separate `Visionect-Software-Suite`, Redis,
-and Postgres containers are outside this app's deployment scope.
+Production uses Unraid. Preserve the existing container identity, port mapping,
+autostart, labels, logging, and image-cache mapping when replacing it. Update both
+the running image and Unraid's saved DockerMan template. Deployment-specific
+access details, exact backups, and rollback records are in the local ignored
+migration directory; keep them out of public documentation. The separate
+Visionect Software Suite, Redis, and Postgres services are outside this app's
+deployment scope.
 
 Before replacing a live container, inspect `docker diff`, compare `/app` source
 against Git and the original image, back up its configuration/cache/template, and

@@ -1,81 +1,50 @@
-# Visionect / NYT renderer audit — November 25, 2026
+# NYT renderer migration — November 25, 2026
 
-## Before migration
+## Source recovery
 
-- Custom container: `nyt-to-image`, ID `88f6b923d113`.
-- Image: `danyal711/nyt-to-image:v1.3`.
-- Image ID: `sha256:daeebf83c337f4ca9f3af2621578fa46ebbc0b1f7dfe2280fc313a17b4bdc229`.
-- Docker Hub digest: `sha256:7ea00aa1bee7af0766cb805f0dd809832b19ba3ad4bc6b7d9a516fee2b975790`.
-- Bridge network, TCP 10070 → 8001, no mounts, restart policy `no`; listed in
-  Unraid autostart. Docker logging capped at one 50 MB file.
-- Python 3.8.12, Bottle 0.12.19, pdf2image 1.16.0, Pillow 8.4.0, Requests 2.26.0.
-- Separate vendor container: `Visionect-Software-Suite`, image
-  `visionect/visionect-server-v3:7.6.5`. Its database/Redis/display settings are
-  outside this migration.
+The deployed application had edits beyond its published Docker Hub image. Its
+PDF crop-box setting, hidden-annotation setting, and HTML placement were recovered
+before cleanup. Most were already in the local script; the missing top offset
+was restored. The exact recovered script was committed before refactoring
+(`946233c`). Original files and deployment evidence are retained locally and
+excluded from the public repository.
 
-## Verified live edits
+## Application cleanup
 
-`docker diff` marked `/app/nyt_server.py` modified and showed an installed nano
-editor. Comparison against the original v1.3 image confirmed functional edits:
-crop-box rendering, hidden PDF annotations, revised fallback/error handling, and
-HTML offsets. The local script already contained most of these edits; it lacked
-the live `margin-top: -35px`. The live file was copied locally and committed
-unchanged before cleanup (`946233c`).
+- Preserve 1480px width, 600 DPI, grayscale conversion, PDF crop box, hidden
+  annotations, and HTML offsets of left -23px / top -35px.
+- Fix unreachable fallback logic, trying three dates one day at a time.
+- Add HTTP/render timeouts, explicit HTTP errors, error logging, atomic image
+  replacement, and fallback to the last good cached image during upstream failure.
+- Add a health endpoint without download side effects and import-safe startup.
+- Update to Python 3.13, Debian Trixie distribution Poppler, pinned dependencies,
+  a non-root user, and a persistent image cache.
+- Exclude old environments, generated newspaper assets, and audit files from Git
+  and Docker. Replace the historical vendor-stack compose file with an app-only
+  compose file; the separate vendor services remain unchanged.
 
-The live and local Dockerfile, requirements, and old compose file were byte-for-
-byte identical. The only other changed `/app` file was generated `nyt_fp.png`.
-No bind mounts could be hiding a second source version. Remaining writable-layer
-changes were editor packages, package-manager bookkeeping, Python bytecode and
-temporary files, rather than additional application code.
+## Validation and release
 
-SHA-256 of live `nyt_server.py` before cleanup:
-`a7265c28d14eaa14760568ef8a49040d06f2227d4ce9a978489fd46a0941c7b5`.
-Local script before reconciliation:
-`cd4e5fc2031c5385f4a2e1a38423fc6b4beaf4762759eed6d1f9e638140cb0d3`.
+Eight regression tests passed locally and in GitHub Actions. A generated-PDF
+smoke test exercised real Poppler without network access. Today's NYT front page
+also rendered successfully in the local image and published amd64 image.
+The output remained 1480 × 2665 pixels, RGB. Compared with the previous rendering,
+98.59% of pixels were identical and the mean channel difference was 0.081 on a
+0–255 scale. Visual inspection confirmed the full-page layout and HTML offsets.
 
-The old HTTP endpoint successfully refreshed the November 25 edition and served
-the recovered HTML offsets. Baseline image: PNG, RGB, 1480 × 2665.
+Public repository: https://github.com/danyal/nyt-to-pdf
 
-## Cleanup
+Release: https://github.com/danyal/nyt-to-pdf/releases/tag/v1.4.0
 
-- Preserve live rendering options and HTML placement.
-- Repair unreachable fallback logic: 404s are checked before attempting PDF
-  conversion, with dates correctly handling month/year boundaries.
-- Add download/render timeouts, explicit HTTP errors, useful error logging,
-  atomic image replacement, and cached-image fallback during upstream failures.
-- Add a side-effect-free health endpoint and import-safe server startup.
-- Replace end-of-life Python/Debian and hand-compiled 2021 Poppler with Python
-  3.13, Debian Trixie distribution packages, and pinned Python dependencies.
-- Run as UID 1000; persist the rendered PNG outside the container writable layer.
-- Exclude the old environment, sample assets, and audit files from Git and Docker.
-  Preserve the old exploratory script under `.local/legacy/`.
-- Replace the historical vendor-stack compose file with a standalone app compose
-  file; original remains backed up locally. Do not apply it to the vendor stack.
+Publishing run: https://github.com/danyal/nyt-to-pdf/actions/runs/45744483828
 
-## Backup and rollback
+The release workflow passed testing, amd64 build, real PDF conversion, and GHCR
+publishing. Anonymous image pulls work. Production has been switched to
+`ghcr.io/danyal/nyt-to-pdf:stable`; health, HTML, and PNG responses were verified
+after replacement. The original edited container and deployment configuration
+are retained for rollback, with detailed access and rollback instructions in the
+local ignored audit directory. The physical e-paper panel was not observed.
 
-Local audit directory: `.local/migration-2026-11-25/` (ignored by Git), including
-original local files, exact live `/app`, original-image script, and deployment
-inspection/template/autostart. It contains generated newspaper assets and is not
-part of the public repository or image.
-
-The production replacement must retain the original container under
-`nyt-to-image-before-ghcr-20261125` and back up the DockerMan template under
-`/mnt/user/appdata/nyt-to-image/migration-20261125/`.
-
-To roll back, stop the new `nyt-to-image`, rename it aside, restore the original
-container's name, start it, and restore the backed-up XML template. Keep the
-original container: merely recreating Docker Hub v1.3 would lose the recovered
-live edits. Keep the original image and old container until the user is satisfied.
-
-Deployment results and exact release digest will be appended after verification.
-
-## Local validation before publication
-
-Eight regression tests passed. A generated-PDF smoke test exercised real Poppler
-inside the replacement image without network access. The replacement also fetched
-and rendered the November 25 edition successfully over HTTP. Its PNG remained
-1480 × 2665, RGB. Compared with the saved production rendering, 98.59% of pixels
-were identical; the mean per-channel difference was 0.081 on a 0–255 scale. A
-visual inspection confirmed the full-page layout; minor raster differences are
-expected with updated Poppler. Both recovered HTML offsets were unchanged.
+Publishing a full GitHub release advances `stable`. Applying that update in
+Unraid is a separate operation; this migration did not enable an automatic
+installation schedule.
