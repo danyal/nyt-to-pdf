@@ -1,0 +1,15 @@
+services:
+  nyt-to-image:
+    image: ghcr.io/danyal/nyt-to-pdf:stable
+    build: .
+    container_name: nyt-to-image
+    ports:
+      - "10070:8001"
+    environment:
+      TZ: America/Los_Angeles
+    volumes:
+      - nyt-cache:/data
+    restart: unless-stopped
+
+volumes:
+  nyt-cache:

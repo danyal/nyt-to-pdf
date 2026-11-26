@@ -1,39 +1,28 @@
 # syntax=docker/dockerfile:1
+FROM python:3.13-slim-trixie
 
-FROM python:3.8-slim-buster
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TZ=America/Los_Angeles \
+    IMAGE_PATH=/data/nyt_fp.png
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends poppler-utils poppler-data tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --no-create-home app \
+    && mkdir /data && chown app:app /data
 
 WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY nyt_server.py ./
 
-COPY requirements.txt requirements.txt
-RUN pip3 install -r requirements.txt
+LABEL org.opencontainers.image.source="https://github.com/danyal/nyt-to-pdf" \
+      org.opencontainers.image.description="NYT front-page PDF to PNG service for a Visionect display"
 
-COPY . .
-
-ENV TZ=America/Los_Angeles
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-RUN apt-get update && apt-get install apt-utils wget build-essential cmake libfreetype6-dev pkg-config libfontconfig-dev libjpeg-dev libopenjp2-7-dev libcairo2-dev libtiff5-dev -y
-RUN wget https://poppler.freedesktop.org/poppler-data-0.4.10.tar.gz \
-    && tar -xf poppler-data-0.4.10.tar.gz \
-    && cd poppler-data-0.4.10 \
-    && make install \
-    && cd .. \
-    && wget https://poppler.freedesktop.org/poppler-21.03.0.tar.xz \
-    && tar -xf poppler-21.03.0.tar.xz \
-    && cd poppler-21.03.0 \
-    && mkdir build \
-    && cd build \
-    && cmake .. \
-    && make \
-    && make install \
-    && cd ../.. \
-    && ldconfig \
-    && rm poppler-data-0.4.10.tar.gz \
-    && rm -rf poppler-data-0.4.10 \
-    && rm poppler-21.03.0.tar.xz \
-    && rm -rf poppler-21.03.0
-CMD tail -f /dev/null
-
+USER app
 EXPOSE 8001
-
-CMD [ "python3", "-u", "nyt_server.py"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3)"
+CMD ["python", "nyt_server.py"]
