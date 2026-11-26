@@ -1,0 +1,15 @@
+# Local audit backups, environments, and generated newspaper assets
+.local/
+.venv/
+venv/
+bin/
+include/
+lib/
+pyvenv.cfg
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+nyt_fp.png
+test.pdf
+test_images/
